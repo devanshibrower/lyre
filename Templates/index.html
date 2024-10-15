@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Genre Visualization</title>
+</head>
+<body>
+    <div id="genre-container">
+        {% for genre, count in genre_counts.items() %}
+            <div class="genre-box" data-genre="{{ genre }}" style="flex: {{ count }};">
+                {{ genre }} ({{ count }})
+            </div>
+        {% endfor %}
+    </div>
+    <div id="song-list">
+        <h2>Songs in GENIE</h2>
+        <ul id="songs"></ul>
+    </div>
+
+    <script>
+        document.querySelectorAll('.genre-box').forEach(box => {
+            box.addEventListener('click', function () {
+                const genre = this.getAttribute('data-genre');
+                fetch(`/songs/${genre}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const songList = document.getElementById('songs');
+                        songList.innerHTML = '';
+                        for (const [name, details] of Object.entries(data)) {
+                            const li = document.createElement('li');
+                            li.textContent = `${name} by ${details.artist}`;
+                            songList.appendChild(li);
+                        }
+                    });
+            });
+        });
+    </script>
+</body>
+</html>
