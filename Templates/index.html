@@ -3,38 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <title>Genre Visualization</title>
+    <title>Genre Treemap Visualization</title>
+    <style>
+        .node {
+            stroke: #fff;
+            cursor: pointer;
+        }
+        .label {
+            font-size: 12px;
+            text-anchor: middle;
+        }
+    </style>
 </head>
 <body>
-    <div id="genre-container">
-        {% for genre, count in genre_counts.items() %}
-            <div class="genre-box" data-genre="{{ genre }}" style="flex: {{ count }};">
-                {{ genre }} ({{ count }})
-            </div>
-        {% endfor %}
-    </div>
+    <h1>Genre Treemap Visualization</h1>
+    <div id="chart"></div>
+    
     <div id="song-list">
-        <h2>Songs in GENIE</h2>
+        <h2>Songs in Genre</h2>
         <ul id="songs"></ul>
     </div>
 
     <script>
-        document.querySelectorAll('.genre-box').forEach(box => {
-            box.addEventListener('click', function () {
-                const genre = this.getAttribute('data-genre');
-                fetch(`/songs/${genre}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        const songList = document.getElementById('songs');
-                        songList.innerHTML = '';
-                        for (const [name, details] of Object.entries(data)) {
-                            const li = document.createElement('li');
-                            li.textContent = `${name} by ${details.artist}`;
-                            songList.appendChild(li);
-                        }
-                    });
+        document.addEventListener("DOMContentLoaded", function () {
+            // Genre data from server
+            const genreCounts = {{ genre_counts | tojson }};
+
+            // Set up the D3 treemap container
+            const width = 800;
+            const height = 600;
+
+            const data = {
+                name: "Genres",
+                children: Object.entries(genreCounts).map(([key, value]) => ({
+                    name: key,
+                    value: value
+                }))
+            };
+
+            const root = d3.hierarchy(data)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+
+            const treemap = d3.treemap()
+                .size([width, height])
+                .padding(0);
+
+            treemap(root);
+
+            const svg = d3.select("#chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // Define gradients
+            const defs = svg.append("defs");
+
+            const gradients = [
+                { id: "popGradient", colors: ["#ffafbd", "#ffc3a0"] },
+                { id: "rockGradient", colors: ["#ff9a9e", "#fad0c4"] },
+                { id: "jazzGradient", colors: ["#a1c4fd", "#c2e9fb"] },
+                { id: "hiphopGradient", colors: ["#fbc2eb", "#a6c1ee"] },
+                { id: "classicalGradient", colors: ["#f6d365", "#fda085"] },
+                { id: "electronicGradient", colors: ["#84fab0", "#8fd3f4"] },
+                { id: "defaultGradient", colors: ["#d4fc79", "#96e6a1"] }
+            ];
+
+            gradients.forEach(gradient => {
+                const grad = defs.append("radialGradient")
+                    .attr("id", gradient.id);
+
+                grad.append("stop")
+                    .attr("offset", "0%")
+                    .attr("stop-color", gradient.colors[0]);
+
+                grad.append("stop")
+                    .attr("offset", "100%")
+                    .attr("stop-color", gradient.colors[1]);
             });
+
+            const nodes = svg.selectAll("g")
+                .data(root.leaves())
+                .enter()
+                .append("g")
+                .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+            nodes.append("rect")
+                .attr("class", "node")
+                .attr("id", d => d.data.name)
+                .attr("width", d => d.x1 - d.x0)
+                .attr("height", d => d.y1 - d.y0)
+                .attr("fill", d => {
+                    switch (d.data.name.toLowerCase()) {
+                        case "pop":
+                            return "url(#popGradient)";
+                        case "rock":
+                            return "url(#rockGradient)";
+                        case "jazz":
+                            return "url(#jazzGradient)";
+                        case "hip-hop":
+                            return "url(#hiphopGradient)";
+                        case "classical":
+                            return "url(#classicalGradient)";
+                        case "electronic":
+                            return "url(#electronicGradient)";
+                        default:
+                            return "url(#defaultGradient)";
+                    }
+                })
+                .on("click", function(event, d) {
+                    // Fetch and display songs by genre
+                    fetch(`/songs/${d.data.name}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            const songList = document.getElementById('songs');
+                            songList.innerHTML = '';
+                            for (const [name, details] of Object.entries(data)) {
+                                const li = document.createElement('li');
+                                li.textContent = `${name} by ${details.artist}`;
+                                songList.appendChild(li);
+                            }
+                        });
+                });
+
+            nodes.append("text")
+                .attr("class", "label")
+                .attr("dx", d => (d.x1 - d.x0) / 2)
+                .attr("dy", d => (d.y1 - d.y0) / 2)
+                .text(d => d.data.name);
         });
     </script>
 </body>

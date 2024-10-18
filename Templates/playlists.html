@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Playlist Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        #treemap {
+            width: 600px;
+            height: 400px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Your Spotify Playlists</h1>
+    <ul id="playlist-list">
+    {% for playlist in playlists %}
+        <li><a href="#" onclick="loadPlaylist('{{ playlist.id }}'); return false;">{{ playlist.name }}</a></li>
+    {% endfor %}
+    </ul>
+    <div id="treemap"></div>
+    <div id="song-list"></div>
+
+    <script>
+    let playlistData;
+
+    function loadPlaylist(playlistId) {
+        console.log("Loading playlist:", playlistId);
+        fetch(`/get_playlist/${playlistId}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Playlist data received:", data);
+                playlistData = data;  // Store the data
+                if (data.genre_counts) {
+                    createTreemap(data.genre_counts);
+                } else {
+                    console.error("No genre_counts in the received data");
+                }
+            })
+            .catch(error => console.error("Error loading playlist:", error));
+    }
+
+    function createTreemap(genreCounts) {
+        console.log("Creating treemap with genre counts:", genreCounts);
+        d3.select("#treemap").html("");
+
+        const width = 600;
+        const height = 400;
+
+        const data = {
+            name: "root",
+            children: Object.entries(genreCounts).map(([genre, count]) => ({ name: genre, value: count }))
+        };
+
+        const root = d3.hierarchy(data)
+            .sum(d => d.value)
+            .sort((a, b) => b.value - a.value);
+
+        d3.treemap()
+            .size([width, height])
+            .padding(1)
+            (root);
+
+        const svg = d3.select("#treemap")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        const cell = svg.selectAll("g")
+            .data(root.leaves())
+            .join("g")
+            .attr("transform", d => `translate(${d.x0},${d.y0})`);
+
+        cell.append("rect")
+            .attr("width", d => d.x1 - d.x0)
+            .attr("height", d => d.y1 - d.y0)
+            .attr("fill", d => color(d.data.name))
+            .on("click", function(event, d) {
+                console.log("Rectangle clicked:", d.data.name);
+                showSongs(d.data.name);
+            });
+
+        cell.append("text")
+            .selectAll("tspan")
+            .data(d => d.data.name.split(/(?=[A-Z][a-z])|\s+/g).concat(d.value))
+            .join("tspan")
+            .attr("x", 3)
+            .attr("y", (d, i, nodes) => `${(i === nodes.length - 1) * 0.3 + 1.1 + i * 0.9}em`)
+            .attr("fill-opacity", (d, i, nodes) => i === nodes.length - 1 ? 0.7 : null)
+            .text(d => d);
+
+        console.log("Treemap created");
+    }
+
+    function showSongs(genre) {
+        console.log("Showing songs for genre:", genre);
+        if (!playlistData || !playlistData.songs) {
+            console.error("No playlist data available");
+            return;
+        }
+
+        const songList = d3.select("#song-list");
+        songList.html(""); // Clear previous content
+        songList.append("h2").text(`Songs in ${genre} genre`);
+        const ul = songList.append("ul");
+
+        const songsInGenre = playlistData.songs.filter(song => song.genre.toLowerCase() === genre.toLowerCase());
+
+        if (songsInGenre.length === 0) {
+            ul.append("li").text("No songs found in this genre.");
+        } else {
+            songsInGenre.forEach(song => {
+                ul.append("li").text(`${song.name} by ${song.artist}`);
+            });
+        }
+    }
+    </script>
+</body>
+</html>
